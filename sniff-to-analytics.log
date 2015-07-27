@@ -1,0 +1,23 @@
+Found 8 processes that could cause trouble.
+If airodump-ng, aireplay-ng or airtun-ng stops working after
+a short period of time, you may want to kill (some of) them!
+
+  PID Name
+ 1682 ifplugd
+ 1698 ifplugd
+ 1747 ifplugd
+ 1831 wpa_supplicant
+ 2497 avahi-daemon
+ 2499 avahi-daemon
+ 2604 ifplugd
+ 2965 dhcpcd
+
+PHY	Interface	Driver		Chipset
+
+phy0	wlan0mon	rt2800usb	Ralink Technology, Corp. RT5370
+phy1	wlan1		rt2800usb	Ralink Technology, Corp. RT5370
+
+tshark: Lua: Error during loading:
+ [string "/usr/share/wireshark/init.lua"]:45: dofile has been disabled
+Running as user "root" and group "root". This could be dangerous.
+Capturing on wlan0mon

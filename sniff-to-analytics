@@ -1,0 +1,10 @@
+#!/bin/sh
+#
+# Put first card into monitor mode.
+#
+sudo airmon-ng start wlan0
+#
+# Use tshark to print lines of probereq packets, pipe those through python 
+# to Google Analytics.
+#
+sudo tshark -l -i wlan0mon subtype probereq | python log_packet.py UA-65628314-1 probereq
