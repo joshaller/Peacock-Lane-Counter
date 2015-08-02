@@ -16,12 +16,74 @@ from firebase import firebase
 from firebase import jsonutil
 import threading
 
-mac_last_seen = {}
+#mac_last_seen = {}
+state = { 'mac_last_seen' : {}, 'samples' : []  }
 lock = threading.Lock()
 reporting_interval_secs = 5
-db_name = 'mac-last-seen.p'
-tmp_db_name = 'mac-last-seen.tmp'
+db_name = 'state.p'
+tmp_db_name = 'state.tmp'
 
+#
+# Dictionary for rolling data graph.
+#
+
+def graph_dict(state):
+    # Pull samples.
+    samples = []
+    for x in state['samples'][-20:]:
+        samples.append(x['unique-visitors-last-hour'])
+
+    graph = {
+        'chart' : {
+            'type': 'spline'
+        },
+        'title': {
+            'text': 'Peacock Lane Traffic'
+        },
+        'xAxis': {
+            'type': 'datetime',
+            'dateTimeLabelFormats': {
+                'day': '%b %e',
+                'hour': '%l%p'
+            },
+            'labels': {
+                'overflow': 'justify'
+            }
+        },
+        'yAxis': {
+            'title': {
+                'text': 'Visitors / Hour'
+            },
+            'min': 0,
+            'minorGridLineWidth': 1,
+            'gridLineWidth': 1,
+            'alternateGridColor': None,
+        },
+        'tooltip': {
+            'valueSuffix': ' visitors/hour'
+        },
+        'plotOptions': {
+            'spline': {
+                'lineWidth': 4,
+                'states': {
+                    'hover': {
+                        'lineWidth': 5
+                    }
+                },
+                'marker': {
+                    'enabled': False
+                },
+                'pointInterval': 3600000, # one hour
+                'pointStart': time.time() * 1000   # msecs since 1970
+            }
+        },
+        'series': [{
+            'name': 'Traffic',
+            'data': samples
+        }]
+    }
+
+    return graph
 #
 #
 #
@@ -41,11 +103,11 @@ def reportAnalytics():
     lock.acquire()
     visitor_count_1_hour = 0
     visitor_count_24_hour = 0
-    total_visitors = len(mac_last_seen)
+    total_visitors = len(state['mac_last_seen'])
     now = time.time()
 
-    for mac in mac_last_seen:
-        age = now - mac_last_seen[mac]
+    for mac in state['mac_last_seen']:
+        age = now - state['mac_last_seen'][mac]
         if age < 3600:
             visitor_count_1_hour = visitor_count_1_hour + 1
         if age < (24*3600):
@@ -59,16 +121,30 @@ def reportAnalytics():
             firebase_api.put('/', 'unique-visitors-last-hour', visitor_count_1_hour)
             firebase_api.put('/', 'unique-visitors-last-day', visitor_count_24_hour)
             firebase_api.put('/', 'total-visitors', total_visitors)
+            firebase_api.put('/', 'graph', graph_dict(state))
         except:
-            print 'problem reaching firebase.'
+            print 'Unable to push analytics to firebase.'
+
+    # Add sample.
+
+    if state.has_key('samples'):
+        # todo, decide when to add sample, when to add null samples.
+        sample = { 'time' : time.time(), 'unique-visitors-last-hour' : visitor_count_1_hour }
+        state['samples'].append(sample)
+    else:
+        sample = { 'time' : time.time(), 'unique-visitors-last-hour' : visitor_count_1_hour }
+        state['samples'] = [ sample ]
+
 
     # Save pickled copy of master list in case we crash.
-    pickle.dump(mac_last_seen, open(tmp_db_name, 'wb'))
+    pickle.dump(state, open(tmp_db_name, 'wb'))
     os.rename(tmp_db_name, db_name)
 
     # Report again after delay.
     threading.Timer(reporting_interval_secs, reportAnalytics, ()).start()
     lock.release()
+
+
 
 if __name__ == '__main__':
     global firebase_api, type
@@ -80,11 +156,11 @@ if __name__ == '__main__':
 
     # load previously saved db
     try:
-        mac_last_seen = pickle.load(open(db_name, 'rb'))
+        state = pickle.load(open(db_name, 'rb'))
     except:
         print 'problem with pickle file.'
         pass
-    print 'starting with %d macs loaded' % len(mac_last_seen)
+    print 'starting with %d macs loaded' % len(state['mac_last_seen'])
     sys.stdout.flush()
 
     # Configure firebase.
@@ -149,5 +225,5 @@ if __name__ == '__main__':
         # Update our list.
 
         lock.acquire()
-        mac_last_seen[mac_addr] = time.time()
+        state['mac_last_seen'][mac_addr] = time.time()
         lock.release()
