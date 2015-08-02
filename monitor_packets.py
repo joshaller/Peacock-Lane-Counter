@@ -92,20 +92,16 @@ if __name__ == '__main__':
     firebase_api = firebase.FirebaseApplication('https://%s.firebaseio.com' % firebase_id, authentication=None)
 
     if not firebase_api:
-        print 'cannot initialize firebase.'
-        sys.stdout.flush()
-    else:
-        print 'api:'
-        print firebase_api
+        print 'Cannot initialize firebase.'
         sys.stdout.flush()
 
     # register start time.
 
     try:
         firebase_api.put('/', 'last-reboot', time.asctime())
-        print 'start time set in firebase.'
+        print 'Reboot time set in firebase.'
     except:
-        print 'problem reaching firebase.'
+        print 'Unable to set reboot time -- problem reaching firebase.'
 
     #try:
     #    firebase_api.get('/', 'count-started')
@@ -132,12 +128,15 @@ if __name__ == '__main__':
     while True:
         try:
             line=raw_input()
+            print line
+            sys.stdout.flush()
         except:
             print 'log_packet: exiting at EOF.'
             quit()
 
         try:
             part = line.split()
+            strength = float(part[0])
             mac_addr = part[1]
         except:
             continue

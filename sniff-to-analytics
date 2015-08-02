@@ -7,4 +7,4 @@ sudo airmon-ng start wlan0
 # Use tshark to print lines of probereq packets, pipe those through python 
 # to Google Analytics.
 #
-sudo tshark -l -i wlan0mon subtype probereq | python monitor_packets.py peacock-lane-counter probereq
+sudo tshark -l -T fields -e radiotap.dbm_antsignal -e wlan.sa -i wlan0mon subtype probereq | python monitor_packets.py peacock-lane-counter probereq
