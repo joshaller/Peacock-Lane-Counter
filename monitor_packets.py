@@ -16,26 +16,84 @@ from firebase import firebase
 from firebase import jsonutil
 import threading
 
-#mac_last_seen = {}
-state = { 'mac_last_seen' : {}, 'samples' : []  }
-lock = threading.Lock()
-reporting_interval_secs = 5
+#
+# Settings
+#
+
+reporting_interval = 5 # secs
+minimum_record_interval = 5 * 60 # secs
 db_name = 'state.p'
 tmp_db_name = 'state.tmp'
+
+#
+# Globals
+#
+
+state = { 'mac_last_seen' : {}, 'samples' : []  }
+lock = threading.Lock()
+
+#
+# Utility
+#
+
+def json_format(dict):
+    return json.dumps(dict, sort_keys=True, indent=4, separators=(',', ': '))
 
 #
 # Dictionary for rolling data graph.
 #
 
-def graph_dict(state):
-    # Pull samples.
+def graph_json(state, reporting_period_start, reporting_period_end, reporting_samples):
+
+    #
+    ## Generate samples needed in graph.
+    #
+
     samples = []
-    for x in state['samples'][-20:]:
-        samples.append(x['unique-visitors-last-hour'])
+
+    # Widened match distance to average samples.
+    match_dist = 2.0 * (reporting_period_end - reporting_period_start) / reporting_samples
+
+    #
+    # Find closest recorded sample for each reporting point.
+    #
+
+    for i in range(0,reporting_samples):
+        ## parameterize 0..1 along time line.
+        u = float(i) / (reporting_samples-1)
+        interp_time = (1-u) * reporting_period_start + u * reporting_period_end
+
+        ## search for best match to desired time.
+        best_dt = 1e+20
+        #best_value = None
+        value_sum = 0
+        value_count = 0
+
+        for trial in state['samples']:
+            dt = abs(trial['time'] - interp_time)
+            if dt < match_dist:
+                value_sum += trial['unique-visitors-last-hour']
+                value_count += 1
+
+            #if dt < match_dist and dt < best_dt:
+                #best_dt = dt
+                #best_value = trial['unique-visitors-last-hour']
+
+        ## add closest or None to represent the sample.
+        #samples.append(best_value)
+        if value_count > 0:
+            samples.append(round(float(value_sum) / value_count, 1))
+        else:
+            samples.append(None)
+
+    ## graph time is msecs since 1970
+
+    point_start = int(reporting_period_start * 1000)
+    point_interval = int(1000 * (reporting_period_end - reporting_period_start) / (reporting_samples-1))
 
     graph = {
         'chart' : {
-            'type': 'spline'
+            'type': 'line'
         },
         'title': {
             'text': 'Peacock Lane Traffic'
@@ -63,7 +121,8 @@ def graph_dict(state):
             'valueSuffix': ' visitors/hour'
         },
         'plotOptions': {
-            'spline': {
+            'line': {
+                'animation' : False,
                 'lineWidth': 4,
                 'states': {
                     'hover': {
@@ -73,8 +132,8 @@ def graph_dict(state):
                 'marker': {
                     'enabled': False
                 },
-                'pointInterval': 3600000, # one hour
-                'pointStart': time.time() * 1000   # msecs since 1970
+                'pointInterval': point_interval,
+                'pointStart': point_start
             }
         },
         'series': [{
@@ -83,7 +142,30 @@ def graph_dict(state):
         }]
     }
 
-    return graph
+    return json_format(graph)
+
+#
+# 72 hour highcharts graph (json)
+#
+
+def graph_json_72_hours():
+    now = time.time()
+    period = 3600 * 72
+    reporting_samples = 100 # one per hour
+    reporting_period_end = now
+    reporting_period_start = reporting_period_end - period
+    json = graph_json(state, reporting_period_start, reporting_period_end, reporting_samples)
+    return json
+
+def graph_json_24_hours():
+    now = time.time()
+    period = 3600 * 24
+    reporting_samples = 100 # one per hour
+    reporting_period_end = now
+    reporting_period_start = reporting_period_end - period
+    json = graph_json(state, reporting_period_start, reporting_period_end, reporting_samples)
+    return json
+
 #
 #
 #
@@ -113,35 +195,38 @@ def reportAnalytics():
         if age < (24*3600):
             visitor_count_24_hour = visitor_count_24_hour + 1
 
-    # update Firebase.
+    # Update Firebase.
 
     if firebase_api:
-        try:
-            firebase_api.put('/', 'last-updated', time.asctime())
-            firebase_api.put('/', 'unique-visitors-last-hour', visitor_count_1_hour)
-            firebase_api.put('/', 'unique-visitors-last-day', visitor_count_24_hour)
-            firebase_api.put('/', 'total-visitors', total_visitors)
-            firebase_api.put('/', 'graph', graph_dict(state))
-        except:
-            print 'Unable to push analytics to firebase.'
+        #try:
+        if 1:
+            firebase_api.put('/', 'last_update', time.asctime())
+            firebase_api.put('/', 'unique_visitors_last_hour', visitor_count_1_hour)
+            firebase_api.put('/', 'unique_visitors_last_day', visitor_count_24_hour)
+            firebase_api.put('/', 'total_visitors', total_visitors)
+            firebase_api.put('/', 'graph_72_hours', graph_json_72_hours())
+            firebase_api.put('/', 'graph_24_hours', graph_json_24_hours())
+        #except:
+        #    print 'Unable to push analytics to firebase.'
 
-    # Add sample.
+    ## Record sample to our local dictionary.
+
+    sample = { 'time' : time.time(), 'unique-visitors-last-hour' : visitor_count_1_hour }
 
     if state.has_key('samples'):
-        # todo, decide when to add sample, when to add null samples.
-        sample = { 'time' : time.time(), 'unique-visitors-last-hour' : visitor_count_1_hour }
-        state['samples'].append(sample)
+        if now - state['samples'][-1]['time'] > minimum_record_interval:
+            state['samples'].append(sample)
     else:
-        sample = { 'time' : time.time(), 'unique-visitors-last-hour' : visitor_count_1_hour }
         state['samples'] = [ sample ]
 
+    ## Save pickled copy of master list in case we crash.
 
-    # Save pickled copy of master list in case we crash.
     pickle.dump(state, open(tmp_db_name, 'wb'))
     os.rename(tmp_db_name, db_name)
 
-    # Report again after delay.
-    threading.Timer(reporting_interval_secs, reportAnalytics, ()).start()
+    ## Report again after delay.
+
+    threading.Timer(reporting_interval, reportAnalytics, ()).start()
     lock.release()
 
 
@@ -174,15 +259,10 @@ if __name__ == '__main__':
     # register start time.
 
     try:
-        firebase_api.put('/', 'last-reboot', time.asctime())
+        firebase_api.put('/', 'last_reboot', time.asctime())
         print 'Reboot time set in firebase.'
     except:
         print 'Unable to set reboot time -- problem reaching firebase.'
-
-    #try:
-    #    firebase_api.get('/', 'count-started')
-    #except:
-    #    firebase_api.set('/', 'count-started', time.asctime())
 
     # get GA tracking ID (if enabled).
 
@@ -197,7 +277,7 @@ if __name__ == '__main__':
 
     # Start background thread for reporting rolling stats.
 
-    threading.Timer(reporting_interval_secs, reportAnalytics, ()).start()
+    threading.Timer(reporting_interval, reportAnalytics, ()).start()
 
     # Input loop, respond to every tshark line ouput.
 
