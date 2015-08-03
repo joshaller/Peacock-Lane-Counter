@@ -24,6 +24,7 @@ reporting_interval = 5 # secs
 minimum_record_interval = 5 * 60 # secs
 db_name = 'state.p'
 tmp_db_name = 'state.tmp'
+graph_interp = 'spline'
 
 #
 # Globals
@@ -52,7 +53,8 @@ def graph_json(state, reporting_period_start, reporting_period_end, reporting_sa
     samples = []
 
     # Widened match distance to average samples.
-    match_dist = 2.0 * (reporting_period_end - reporting_period_start) / reporting_samples
+    smooth = 4.0
+    match_dist = smooth * (reporting_period_end - reporting_period_start) / reporting_samples
 
     #
     # Find closest recorded sample for each reporting point.
@@ -93,7 +95,7 @@ def graph_json(state, reporting_period_start, reporting_period_end, reporting_sa
 
     graph = {
         'chart' : {
-            'type': 'line'
+            'type': graph_interp
         },
         'title': {
             'text': 'Peacock Lane Traffic'
@@ -121,7 +123,7 @@ def graph_json(state, reporting_period_start, reporting_period_end, reporting_sa
             'valueSuffix': ' visitors/hour'
         },
         'plotOptions': {
-            'line': {
+            graph_interp: {
                 'animation' : False,
                 'lineWidth': 4,
                 'states': {

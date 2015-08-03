@@ -7,11 +7,11 @@
 
     Highcharts.setOptions({
         global: {
-            timezoneOffset: 8 * 60
+            timezoneOffset: 7 * 60
         }
     });
 
-    fb.on("value", function(data) {
+    fb.on("value", function(data) { 
         var model = data.val();
         $('#container').highcharts(JSON.parse(model.graph_24_hours));
     });
