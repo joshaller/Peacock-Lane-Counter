@@ -98,7 +98,7 @@ def graph_json(state, reporting_period_start, reporting_period_end, reporting_sa
             'type': graph_interp
         },
         'title': {
-            'text': 'Peacock Lane Traffic'
+            'text': 'Peacock Lane Pedestrian Traffic'
         },
         'xAxis': {
             'type': 'datetime',
