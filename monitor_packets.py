@@ -25,6 +25,7 @@ minimum_record_interval = 5 * 60 # secs
 db_name = 'state.p'
 tmp_db_name = 'state.tmp'
 graph_interp = 'spline'
+smoothness = 0.5
 
 #
 # Globals
@@ -53,8 +54,7 @@ def graph_json(state, reporting_period_start, reporting_period_end, reporting_sa
     samples = []
 
     # Widened match distance to average samples.
-    smooth = 4.0
-    match_dist = smooth * (reporting_period_end - reporting_period_start) / reporting_samples
+    match_dist = smoothness * (reporting_period_end - reporting_period_start) / reporting_samples
 
     #
     # Find closest recorded sample for each reporting point.
@@ -213,7 +213,11 @@ def reportAnalytics():
 
     ## Record sample to our local dictionary.
 
-    sample = { 'time' : time.time(), 'unique-visitors-last-hour' : visitor_count_1_hour }
+    sample = { 
+        'time' : time.time(), 
+	'unique-visitors-last-hour' : visitor_count_1_hour, 
+        'total-visitors' : total_visitors 
+    }
 
     if state.has_key('samples'):
         if now - state['samples'][-1]['time'] > minimum_record_interval:
@@ -290,7 +294,7 @@ if __name__ == '__main__':
             sys.stdout.flush()
         except:
             print 'log_packet: exiting at EOF.'
-            quit()
+            os._exit(-1)
 
         try:
             part = line.split()
